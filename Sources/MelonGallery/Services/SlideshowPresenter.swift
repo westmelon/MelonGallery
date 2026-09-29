@@ -8,11 +8,49 @@ final class SlideshowPresenter {
   private var session: SlideshowSession?
   private var closingReferences: [ClosingReferences] = []
 
+  func showComparison(items: [ImageItem], store: GalleryStore) {
+    guard items.count == 2 else { return }
+    close()
+
+    let rootView = ImageComparisonView(items: items, store: store) { [weak self] in
+      self?.close()
+    }
+    let screen = NSApp.keyWindow?.screen ?? NSScreen.main
+    let availableSize = screen?.visibleFrame.size ?? NSSize(width: 1200, height: 760)
+    let window = NSWindow(
+      contentRect: NSRect(
+        origin: .zero,
+        size: NSSize(width: min(1200, availableSize.width), height: min(760, availableSize.height - 40))
+      ),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    let delegate = WindowDelegate { [weak self] delegate, closingWindow in
+      self?.windowWillClose(closingWindow, delegate: delegate)
+    }
+    window.title = L10n.compareImages
+    window.minSize = NSSize(width: 900, height: 480)
+    window.isReleasedWhenClosed = false
+    window.contentViewController = NSHostingController(rootView: rootView)
+    window.delegate = delegate
+    if store.maximizePreviewWindow, let screen {
+      window.setFrame(screen.visibleFrame, display: false)
+    } else {
+      window.center()
+    }
+    self.window = window
+    self.windowDelegate = delegate
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
   func show(
     items: [ImageItem],
     startingAt startID: ImageItem.ID?,
     store: GalleryStore,
-    autoplay: Bool = true
+    autoplay: Bool = true,
+    displayItem: ImageItem? = nil
   ) {
     guard !items.isEmpty else {
       return
@@ -21,6 +59,7 @@ final class SlideshowPresenter {
     close()
 
     let session = SlideshowSession(items: items, startingAt: startID)
+    if let displayItem { session.showPairedImage(displayItem) }
     let rootView = SlideshowView(session: session, store: store, autoplay: autoplay) { [weak self] in
       self?.close()
     }
@@ -42,7 +81,13 @@ final class SlideshowPresenter {
     window.isReleasedWhenClosed = false
     window.contentViewController = NSHostingController(rootView: rootView)
     window.delegate = delegate
-    window.center()
+    if !autoplay,
+       store.maximizePreviewWindow,
+       let screen = NSApp.keyWindow?.screen ?? NSScreen.main {
+      window.setFrame(screen.visibleFrame, display: false)
+    } else {
+      window.center()
+    }
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
 
@@ -93,6 +138,8 @@ final class SlideshowPresenter {
   private func releaseClosingReferences(for delegate: WindowDelegate) {
     closingReferences.removeAll { references in
       if references.delegate === delegate {
+        references.window?.contentViewController = nil
+        references.window?.contentView = nil
         references.window?.delegate = nil
         return true
       }

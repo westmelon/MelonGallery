@@ -24,9 +24,17 @@ struct SidebarView: View {
               SidebarFolderRow(
                 title: folder.lastPathComponent,
                 detail: folder.deletingLastPathComponent().path,
-                systemImage: "clock"
-              )
+                systemImage: "clock",
+                removeTitle: L10n.removeFromRecent
+              ) {
+                store.removeRecentFolder(folder)
+              }
               .tag(SidebarItem.recent(folder))
+              .contextMenu {
+                Button(L10n.removeFromRecent) {
+                  store.removeRecentFolder(folder)
+                }
+              }
             }
           }
         }
@@ -40,8 +48,11 @@ struct SidebarView: View {
               SidebarFolderRow(
                 title: folder.lastPathComponent,
                 detail: folder.deletingLastPathComponent().path,
-                systemImage: "star"
-              )
+                systemImage: "star",
+                removeTitle: L10n.removeFavorite
+              ) {
+                store.removeFavorite(folder)
+              }
               .tag(SidebarItem.favorite(folder))
               .contextMenu {
                 Button(L10n.removeFavorite) {
@@ -77,6 +88,8 @@ private struct SidebarFolderRow: View {
   let title: String
   let detail: String?
   let systemImage: String
+  var removeTitle: String?
+  var onRemove: (() -> Void)?
 
   var body: some View {
     HStack(spacing: 10) {
@@ -96,6 +109,19 @@ private struct SidebarFolderRow: View {
             .truncationMode(.middle)
         }
       }
+
+      Spacer(minLength: 4)
+
+      if let removeTitle, let onRemove {
+        Button(action: onRemove) {
+          Image(systemName: "xmark.circle.fill")
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(removeTitle)
+        .accessibilityLabel(removeTitle)
+      }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }

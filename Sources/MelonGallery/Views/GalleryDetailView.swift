@@ -12,6 +12,18 @@ struct GalleryDetailView: View {
           }
         } else if store.items.isEmpty && !store.isScanning {
           EmptyImagesView()
+        } else if store.browsableItems.isEmpty && !store.isScanning {
+          VStack(spacing: 12) {
+            Label(L10n.rawFilesHidden, systemImage: "eye.slash")
+              .foregroundStyle(.secondary)
+            Button(L10n.showRAWFiles) {
+              store.showRAWFiles = true
+            }
+          }
+        } else if store.filteredItems.isEmpty && !store.isScanning {
+          EmptyFilteredImagesView {
+            store.clearFilters()
+          }
         } else {
           ImageGridView(store: store)
         }
@@ -19,6 +31,17 @@ struct GalleryDetailView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
       StatusBarView(store: store)
+    }
+    .alert(
+      L10n.moveSelectedToTrash,
+      isPresented: $store.isConfirmingTrashSelection
+    ) {
+      Button(L10n.cancel, role: .cancel) {}
+      Button(L10n.moveToTrash, role: .destructive) {
+        store.confirmTrashSelection()
+      }
+    } message: {
+      Text(L10n.trashConfirmation(store.selectedIDs.count))
     }
   }
 }
@@ -60,6 +83,23 @@ private struct EmptyImagesView: View {
   }
 }
 
+private struct EmptyFilteredImagesView: View {
+  let clearFilters: () -> Void
+
+  var body: some View {
+    VStack(spacing: 12) {
+      Image(systemName: "line.3.horizontal.decrease.circle")
+        .font(.system(size: 48))
+        .foregroundStyle(.secondary)
+      Text(L10n.noMatchingImages)
+        .font(.title3)
+        .foregroundStyle(.secondary)
+      Button(L10n.clearFilters, action: clearFilters)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
 private struct StatusBarView: View {
   @Bindable var store: GalleryStore
 
@@ -71,7 +111,11 @@ private struct StatusBarView: View {
         Text(L10n.scanning)
       }
 
-      Text(L10n.imageCount(store.items.count))
+      Text(
+        store.isFilterActive
+          ? L10n.filteredImageCount(store.filteredItems.count, total: store.browsableItems.count)
+          : L10n.imageCount(store.browsableItems.count)
+      )
 
       Divider()
         .frame(height: 14)
@@ -86,10 +130,21 @@ private struct StatusBarView: View {
           .truncationMode(.middle)
           .foregroundStyle(.secondary)
       }
+
+      Divider()
+        .frame(height: 14)
+
+      HStack(spacing: 6) {
+        Image(systemName: "photo")
+          .foregroundStyle(.secondary)
+        Slider(value: $store.thumbnailSize, in: 80...240, step: 10)
+          .frame(width: 130)
+      }
+      .help(L10n.thumbnailSize)
     }
     .font(.caption)
     .padding(.horizontal, 12)
-    .frame(height: 28)
+    .frame(height: 32)
     .background(.bar)
   }
 }

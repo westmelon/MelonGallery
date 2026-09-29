@@ -7,10 +7,12 @@ final class SlideshowSession {
   var items: [ImageItem]
   var index: Int
   var isPaused = false
+  private var displayedPair: ImageItem?
 
   @ObservationIgnored private var timer: Timer?
 
   var currentItem: ImageItem? {
+    if let displayedPair { return displayedPair }
     guard items.indices.contains(index) else {
       return nil
     }
@@ -52,6 +54,7 @@ final class SlideshowSession {
   }
 
   func next() {
+    displayedPair = nil
     guard !items.isEmpty else {
       return
     }
@@ -59,6 +62,7 @@ final class SlideshowSession {
   }
 
   func previous() {
+    displayedPair = nil
     guard !items.isEmpty else {
       return
     }
@@ -67,6 +71,16 @@ final class SlideshowSession {
 
   @discardableResult
   func removeCurrentItem() -> Bool {
+    if displayedPair != nil {
+      let removedID = displayedPair?.id
+      displayedPair = nil
+      if let removedIndex = items.firstIndex(where: { $0.id == removedID }) {
+        items.remove(at: removedIndex)
+        if removedIndex < index { index -= 1 }
+        index = min(index, max(items.count - 1, 0))
+      }
+      return !items.isEmpty
+    }
     guard items.indices.contains(index) else {
       return !items.isEmpty
     }
@@ -77,6 +91,10 @@ final class SlideshowSession {
     }
 
     return !items.isEmpty
+  }
+
+  func showPairedImage(_ item: ImageItem) {
+    displayedPair = items.indices.contains(index) && items[index].id == item.id ? nil : item
   }
 
   private func advanceIfPlaying() {

@@ -12,6 +12,10 @@ struct ImageItem: Identifiable, Hashable, Sendable {
   let formatName: String
   let metadata: ImageMetadata
 
+  var isRAW: Bool {
+    url.pathExtension.lowercased() == "rw2"
+  }
+
   var playsAsAnimation: Bool {
     ["gif", "webp"].contains(url.pathExtension.lowercased())
   }

@@ -8,6 +8,12 @@ struct SlideshowView: View {
   let close: () -> Void
 
   @State private var showInspector = false
+  @State private var magnification: CGFloat = 1
+  @State private var showsGrid = false
+  @State private var fitRequest = 0
+  @State private var actualSizeRequest = 0
+  @State private var rawDecodeRequest = 0
+  @State private var image: NSImage?
 
   var body: some View {
     ZStack {
@@ -15,27 +21,55 @@ struct SlideshowView: View {
         .ignoresSafeArea()
 
       HStack(spacing: 0) {
-        ZStack {
-          if let currentItem = session.currentItem {
-            SlideshowImageView(item: currentItem)
-              .padding(28)
+        VStack(spacing: 0) {
+          ZStack {
+            if let currentItem = session.currentItem {
+              SlideshowImageView(
+                item: currentItem,
+                image: $image,
+                magnification: $magnification,
+                showsGrid: showsGrid,
+                fitRequest: fitRequest,
+                actualSizeRequest: actualSizeRequest,
+                rawDecodeRequest: rawDecodeRequest
+              )
+            }
           }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-          VStack {
-            Spacer()
-            SlideshowHUD(
-              session: session,
-              store: store,
-              autoplay: autoplay,
-              showInspector: showInspector,
-              toggleInspector: {
-                showInspector.toggle()
-              },
-              deleteCurrentItem: {
-                deleteCurrentItem()
-              }
-            )
-          }
+          SlideshowHUD(
+            session: session,
+            store: store,
+            autoplay: autoplay,
+            showInspector: showInspector,
+            showsGrid: showsGrid,
+            magnification: magnification,
+            canZoom: image != nil,
+            toggleGrid: {
+              showsGrid.toggle()
+            },
+            toggleInspector: {
+              showInspector.toggle()
+            },
+            zoomOut: {
+              magnification = max(magnification / 1.25, 0.01)
+            },
+            zoomIn: {
+              magnification = min(magnification * 1.25, 8)
+            },
+            fitImage: {
+              fitRequest += 1
+            },
+            showActualSize: {
+              actualSizeRequest += 1
+            },
+            parseRAW: {
+              rawDecodeRequest += 1
+            },
+            deleteCurrentItem: {
+              deleteCurrentItem()
+            }
+          )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -52,6 +86,11 @@ struct SlideshowView: View {
       }
     }
     .frame(minWidth: 640, minHeight: 420)
+    .environment(\.locale, store.appLanguage.locale)
+    .id(store.appLanguage)
+    .onChange(of: session.currentItem?.id) { _, _ in
+      fitRequest += 1
+    }
   }
 
   private func deleteCurrentItem() {
@@ -91,6 +130,12 @@ struct SlideshowView: View {
     case 23, 87:
       setRating(5)
       return true
+    case 24:
+      if image != nil { magnification = min(magnification * 1.25, 8) }
+      return true
+    case 27:
+      if image != nil { magnification = max(magnification / 1.25, 0.01) }
+      return true
     case 29, 82:
       setRating(0)
       return true
@@ -104,10 +149,11 @@ struct SlideshowView: View {
       deleteCurrentItem()
       return true
     case 49:
-      guard autoplay else {
-        return false
+      if autoplay {
+        session.togglePause()
+      } else {
+        close()
       }
-      session.togglePause()
       return true
     case 123:
       session.previous()
@@ -143,7 +189,16 @@ private struct SlideshowHUD: View {
   @Bindable var store: GalleryStore
   let autoplay: Bool
   let showInspector: Bool
+  let showsGrid: Bool
+  let magnification: CGFloat
+  let canZoom: Bool
+  let toggleGrid: () -> Void
   let toggleInspector: () -> Void
+  let zoomOut: () -> Void
+  let zoomIn: () -> Void
+  let fitImage: () -> Void
+  let showActualSize: () -> Void
+  let parseRAW: () -> Void
   let deleteCurrentItem: () -> Void
 
   var body: some View {
@@ -155,6 +210,78 @@ private struct SlideshowHUD: View {
       Spacer()
 
       if let currentItem = session.currentItem {
+        if let paired = store.pairedImage(for: currentItem) {
+          Button {
+            session.showPairedImage(paired)
+          } label: {
+            Image(systemName: "arrow.triangle.2.circlepath")
+          }
+          .buttonStyle(.plain)
+          .help(paired.isRAW ? L10n.switchToRAW : L10n.switchToJPEG)
+          .accessibilityLabel(paired.isRAW ? L10n.switchToRAW : L10n.switchToJPEG)
+
+          Button {
+            store.comparePairedImage(for: currentItem)
+          } label: {
+            Image(systemName: "rectangle.split.2x1")
+          }
+          .buttonStyle(.plain)
+          .help(L10n.compareRAWAndJPEG)
+          .accessibilityLabel(L10n.compareRAWAndJPEG)
+        }
+
+        if currentItem.isRAW {
+          Button(action: parseRAW) {
+            Text("RAW")
+          }
+          .buttonStyle(.plain)
+          .help(L10n.parseRAW)
+          .accessibilityLabel(L10n.parseRAW)
+          .disabled(canZoom)
+        }
+
+        if !currentItem.playsAsAnimation {
+          Button(action: zoomOut) {
+            Image(systemName: "minus.magnifyingglass")
+          }
+          .buttonStyle(.plain)
+          .help(L10n.zoomOut)
+          .disabled(!canZoom)
+
+          Text(canZoom ? "\(Int((magnification * 100).rounded()))%" : "--")
+            .monospacedDigit()
+            .frame(minWidth: 42)
+
+          Button(action: zoomIn) {
+            Image(systemName: "plus.magnifyingglass")
+          }
+          .buttonStyle(.plain)
+          .help(L10n.zoomIn)
+          .disabled(!canZoom)
+
+          Button(action: fitImage) {
+            Image(systemName: "arrow.down.right.and.arrow.up.left")
+          }
+          .buttonStyle(.plain)
+          .help(L10n.fitToWindow)
+
+          Button(action: showActualSize) {
+            Text("1:1")
+          }
+          .buttonStyle(.plain)
+          .help(L10n.actualSize)
+          .disabled(!canZoom)
+
+          Button(action: toggleGrid) {
+            Image(systemName: showsGrid ? "square.grid.3x3.fill" : "square.grid.3x3")
+          }
+          .buttonStyle(.plain)
+          .help(L10n.ruleOfThirds)
+
+          Divider()
+            .frame(height: 14)
+        }
+
         RatingControl(rating: store.rating(for: currentItem)) { rating in
           store.setRating(rating, for: currentItem)
         }
@@ -203,8 +330,9 @@ private struct SlideshowHUD: View {
   }
 }
 
-private struct RatingControl: View {
+struct RatingControl: View {
   let rating: Int
+  var unratedColor: Color = .white
   let setRating: (Int) -> Void
 
   var body: some View {
@@ -214,7 +342,7 @@ private struct RatingControl: View {
           setRating(value == rating ? 0 : value)
         } label: {
           Image(systemName: value <= rating ? "star.fill" : "star")
-            .foregroundStyle(value <= rating ? .yellow : .white)
+            .foregroundStyle(value <= rating ? .yellow : unratedColor)
         }
         .buttonStyle(.plain)
         .help(value == rating ? L10n.clearRating : "\(L10n.rating) \(value)")
@@ -226,25 +354,29 @@ private struct RatingControl: View {
 
 private struct SlideshowImageView: View {
   let item: ImageItem
-  @State private var image: NSImage?
+  @Binding var image: NSImage?
+  @Binding var magnification: CGFloat
+  let showsGrid: Bool
+  let fitRequest: Int
+  let actualSizeRequest: Int
+  let rawDecodeRequest: Int
 
   var body: some View {
     Group {
       if item.playsAsAnimation {
         AnimatedImageView(url: item.url)
-      } else if let image {
-        Image(nsImage: image)
-          .resizable()
-          .scaledToFit()
       } else {
-        ProgressView()
-          .controlSize(.regular)
-          .tint(.white)
+        ImagePreviewView(
+          item: item,
+          image: $image,
+          magnification: $magnification,
+          showsGrid: showsGrid,
+          fitRequest: fitRequest,
+          actualSizeRequest: actualSizeRequest,
+          rawDecodeRequest: rawDecodeRequest
+        )
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .task(id: item.id) {
-      image = ImageDecoder.displayImage(at: item.url, maxPixelSize: 4096)
-    }
   }
 }

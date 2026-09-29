@@ -2,7 +2,7 @@ import Foundation
 
 struct ImageScanner: Sendable {
   private static let supportedExtensions: Set<String> = [
-    "jpg", "jpeg", "png", "gif", "heic", "webp", "tif", "tiff", "bmp", "pdf"
+    "jpg", "jpeg", "png", "gif", "heic", "webp", "tif", "tiff", "bmp", "pdf", "rw2"
   ]
 
   func scanFolder(_ folder: URL, recursive: Bool) async throws -> [ImageItem] {

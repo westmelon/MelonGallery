@@ -2,22 +2,39 @@ import AppKit
 import SwiftUI
 
 struct KeyboardCaptureView: NSViewRepresentable {
+  var focusToken: Int
   var onKeyDown: (NSEvent) -> Bool
 
+  init(focusToken: Int = 0, onKeyDown: @escaping (NSEvent) -> Bool) {
+    self.focusToken = focusToken
+    self.onKeyDown = onKeyDown
+  }
+
   func makeNSView(context: Context) -> KeyCaptureNSView {
-    KeyCaptureNSView(onKeyDown: onKeyDown)
+    KeyCaptureNSView(focusToken: focusToken, onKeyDown: onKeyDown)
   }
 
   func updateNSView(_ nsView: KeyCaptureNSView, context: Context) {
     nsView.onKeyDown = onKeyDown
+    if nsView.focusToken != focusToken {
+      nsView.focusToken = focusToken
+      nsView.requestFocus()
+      return
+    }
+
+    guard !(nsView.window?.firstResponder is NSTextView) else {
+      return
+    }
     nsView.requestFocus()
   }
 }
 
 final class KeyCaptureNSView: NSView {
+  var focusToken: Int
   var onKeyDown: (NSEvent) -> Bool
 
-  init(onKeyDown: @escaping (NSEvent) -> Bool) {
+  init(focusToken: Int, onKeyDown: @escaping (NSEvent) -> Bool) {
+    self.focusToken = focusToken
     self.onKeyDown = onKeyDown
     super.init(frame: .zero)
   }
